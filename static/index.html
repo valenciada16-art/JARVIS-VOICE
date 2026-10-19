@@ -1,0 +1,168 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>J.A.R.V.I.S. Voice Interface</title>
+    <style>
+        body {
+            background-color: #050b14;
+            color: #00d2ff;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 100vh;
+            margin: 0;
+            overflow: hidden;
+        }
+        .reactor-container {
+            position: relative;
+            width: 200px;
+            height: 200px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            margin-bottom: 30px;
+        }
+        .ring {
+            position: absolute;
+            border: 3px dashed #00d2ff;
+            border-radius: 50%;
+            width: 100%;
+            height: 100%;
+            animation: spin 10s linear infinite;
+        }
+        .core {
+            width: 100px;
+            height: 100px;
+            background: radial-gradient(circle, #00d2ff 0%, #004466 70%, #020b14 100%);
+            border-radius: 50%;
+            box-shadow: 0 0 30px #00d2ff, inset 0 0 20px #ffffff;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: transform 0.2s;
+        }
+        .core:active {
+            transform: scale(0.95);
+        }
+        .listening {
+            animation: pulse 1s infinite alternate;
+        }
+        @keyframes spin { 100% { transform: rotate(360deg); } }
+        @keyframes pulse { 0% { box-shadow: 0 0 10px #ff0055; } 100% { box-shadow: 0 0 40px #ff0055; } }
+        #status {
+            font-size: 1.1rem;
+            letter-spacing: 2px;
+            text-transform: uppercase;
+            margin-bottom: 15px;
+            text-align: center;
+        }
+        #response {
+            max-width: 85%;
+            text-align: center;
+            font-size: 1rem;
+            color: #ffffff;
+            background: rgba(0, 210, 255, 0.1);
+            padding: 15px;
+            border-radius: 8px;
+            border: 1px solid rgba(0, 210, 255, 0.3);
+        }
+    </style>
+</head>
+<body>
+
+    <div id="status">Sistema en espera</div>
+
+    <div class="reactor-container" id="mic-btn" onclick="toggleListening()">
+        <div class="ring"></div>
+        <div class="core" id="core"></div>
+    </div>
+
+    <div id="response">Toca el reactor para hablar con J.A.R.V.I.S.</div>
+
+    <script>
+        const statusEl = document.getElementById('status');
+        const responseEl = document.getElementById('response');
+        const coreEl = document.getElementById('core');
+        
+        let recognition;
+        let isListening = false;
+
+        if ('webkitSpeechRecognition' in window || 'SpeechRecognition' in window) {
+            const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+            recognition = new SpeechRecognition();
+            recognition.lang = 'es-ES';
+            recognition.continuous = false;
+            recognition.interimResults = false;
+
+            recognition.onstart = () => {
+                isListening = true;
+                statusEl.innerText = "Escuchando...";
+                coreEl.classList.add('listening');
+            };
+
+            recognition.onresult = async (event) => {
+                const text = event.results[0][0].transcript;
+                responseEl.innerText = `"${text}"`;
+                statusEl.innerText = "Procesando...";
+                await enviarAJarvis(text);
+            };
+
+            recognition.onerror = () => {
+                resetState();
+                statusEl.innerText = "Error de audio";
+            };
+
+            recognition.onend = () => {
+                resetState();
+            };
+        } else {
+            statusEl.innerText = "Reconocimiento no soportado";
+        }
+
+        function toggleListening() {
+            if (!recognition) return;
+            if (isListening) {
+                recognition.stop();
+            } else {
+                recognition.start();
+            }
+        }
+
+        function resetState() {
+            isListening = false;
+            coreEl.classList.remove('listening');
+            statusEl.innerText = "Sistema en espera";
+        }
+
+        async function enviarAJarvis(mensaje) {
+            try {
+                const res = await fetch('/api/chat', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ message: mensaje })
+                });
+                const data = await res.json();
+                responseEl.innerText = data.response;
+                hablar(data.response);
+            } catch (err) {
+                responseEl.innerText = "Error de conexión con el servidor central, Señor.";
+            }
+        }
+
+        function hablar(texto) {
+            if ('speechSynthesis' in window) {
+                window.speechSynthesis.cancel();
+                const utterance = new SpeechSynthesisUtterance(texto);
+                utterance.lang = 'es-ES';
+                utterance.rate = 1.0;
+                window.speechSynthesis.speak(utterance);
+            }
+        }
+    </script>
+</body>
+</html>
